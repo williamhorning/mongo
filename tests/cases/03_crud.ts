@@ -1,4 +1,4 @@
-import type { Database, MongoClient, ObjectId } from "../../mod.ts";
+import type { Database, MongoClient } from "../../mod.ts";
 import {
   MongoInvalidArgumentError,
   MongoServerError,
@@ -18,7 +18,7 @@ import {
 } from "../deps.ts";
 
 interface User {
-  _id: string | ObjectId;
+  _id: string;
   username?: string;
   password?: string;
   uid?: number;
@@ -26,7 +26,7 @@ interface User {
 }
 
 interface ComplexUser {
-  _id: string | ObjectId;
+  _id: string;
   username?: string;
   password?: string;
   friends: string[];
@@ -108,12 +108,14 @@ describe("crud operations", () => {
 
     assert(upsertedId);
 
+    // TODO: this is wrong, fix
+
     const user2 = await users.findOne({
-      _id: upsertedId,
+      _id: upsertedId.oid,
     });
 
     assertEquals(user2, {
-      _id: upsertedId,
+      _id: upsertedId.oid,
       username: "user2",
       password: "pass2",
       date: new Date(dateNow),

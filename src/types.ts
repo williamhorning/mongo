@@ -1,13 +1,4 @@
-import type {
-  Binary,
-  BSONRegExp,
-  Decimal128,
-  Double,
-  Int32,
-  Long,
-  ObjectId,
-  Timestamp,
-} from "../deps.ts";
+import type { ObjectId } from "../deps.ts";
 import type {
   $geoAny,
   $geoMultiPolygon,
@@ -410,10 +401,13 @@ export interface CreateUserOptions {
   /**
    * The roles granted to the user. Can specify an empty array [] to create users without roles.
    */
-  roles?: (string | {
-    role: string;
-    db: string;
-  })[];
+  roles?: (
+    | string
+    | {
+        role: string;
+        db: string;
+      }
+  )[];
 
   /**
    * Optional. Indicates whether the server or the client digests the password.
@@ -636,11 +630,9 @@ export interface DropIndexOptions {
   comment?: Document;
 }
 
-type BitwiseType = Binary | Array<number> | number;
+type BitwiseType = Array<number> | number;
 
-type IntegerType = number | Int32 | Long;
-
-type NumericType = IntegerType | Decimal128 | Double;
+type IntegerType = number;
 
 interface RootFilterOperators<T> {
   $and?: Filter<T>[];
@@ -675,7 +667,7 @@ interface FilterOperators<TValue> {
   $expr?: Document;
   $jsonSchema?: Document;
   $mod?: TValue extends number ? [number, number] : never;
-  $regex?: string | RegExp | BSONRegExp;
+  $regex?: string | RegExp;
   $geoIntersects?: $geoAny;
   $geoWithin?: $geoPolygon | $geoMultiPolygon | ShapeOperator;
   $near?: CenterSpecifier;
@@ -699,22 +691,18 @@ interface FilterOperators<TValue> {
  * @see https://docs.mongodb.com/manual/reference/operator/update/
  */
 interface UpdateOperators<T> extends Document {
-  $currentDate?: DocumentOperator<
-    T,
-    Timestamp | Date,
-    true | { $type: "date" | "timestamp" }
-  >;
-  $inc?: DocumentOperator<T, NumericType>;
+  $currentDate?: DocumentOperator<T, Date, true | { $type: "date" }>;
+  $inc?: DocumentOperator<T, IntegerType>;
   $min?: DocumentOperator<T>;
   $max?: DocumentOperator<T>;
-  $mul?: DocumentOperator<T, NumericType>;
+  $mul?: DocumentOperator<T, IntegerType>;
   $rename?: DocumentOperator<Omit<T, "_id">, string>;
   $set?: DocumentOperator<T>;
   $setOnInsert?: DocumentOperator<T>;
   // deno-lint-ignore no-explicit-any
   $unset?: DocumentOperator<T, any, "" | true | 1>;
   // deno-lint-ignore no-explicit-any
-  $pop?: DocumentOperator<T, Array<any>, (1 | -1)>;
+  $pop?: DocumentOperator<T, Array<any>, 1 | -1>;
   $pull?: {
     [Key in ArrayKeys<T>]?:
       | Flatten<KeyWithSubKeys<T, Key>>
@@ -726,18 +714,18 @@ interface UpdateOperators<T> extends Document {
   $push?: {
     [Key in ArrayKeys<T>]?:
       | {
-        $each?: KeyWithSubKeys<T, Key>;
-        $slice?: number;
-        $position?: number;
-        $sort?: 1 | -1;
-      }
+          $each?: KeyWithSubKeys<T, Key>;
+          $slice?: number;
+          $position?: number;
+          $sort?: 1 | -1;
+        }
       | (KeyWithSubKeys<T, Key> extends Array<unknown>
-        ? KeyWithSubKeys<T, Key>[number]
-        : void);
+          ? KeyWithSubKeys<T, Key>[number]
+          : void);
   };
   $bit?: DocumentOperator<
     T,
-    NumericType,
+    IntegerType,
     { and: IntegerType } | { or: IntegerType } | { xor: IntegerType }
   >;
 }
@@ -784,7 +772,7 @@ type AggregateOperators =
 // deno-lint-ignore no-explicit-any
 type DocumentOperator<T, OnlyType = any, Value = OnlyType> = IsAny<
   OnlyType,
-  (Partial<T> & Document),
+  Partial<T> & Document,
   {
     [key in KeysOfType<T, OnlyType>]?: Value;
   }
@@ -796,66 +784,75 @@ type NotImplementedOperators<Operators extends string, Value = any> = {
 };
 
 /** A filter used when querying data */
-export type Filter<T> =
-  & NotImplementedOperators<"$type">
-  & RootFilterOperators<T>
-  & {
+export type Filter<T> = NotImplementedOperators<"$type"> &
+  RootFilterOperators<T> & {
     [Key in AllKeys<T>]?:
       | KeyWithSubKeys<T, Key>
       | FilterOperators<KeyWithSubKeys<T, Key>>;
   };
 
 /** The filter used when updating a document */
-export type UpdateFilter<T> =
-  & NotImplementedOperators<"$addToSet">
-  & UpdateOperators<T>
-  & Partial<T>;
+export type UpdateFilter<T> = NotImplementedOperators<"$addToSet"> &
+  UpdateOperators<T> &
+  Partial<T>;
 
 /**
  * Aggregation pipelines are used to process many documents
  * @see https://www.mongodb.com/docs/manual/core/aggregation-pipeline/
  */
-export type AggregatePipeline<T> =
-  & NotImplementedOperators<AggregateOperators>
-  & Document
-  & {
+export type AggregatePipeline<T> = NotImplementedOperators<AggregateOperators> &
+  Document & {
     ["$match"]?: Filter<T>;
   };
 
 type Flatten<T> = T extends Array<infer Item> ? Item : T;
 
-type IsAny<T, Y, N> = 0 extends (1 & T) ? Y : N;
+type IsAny<T, Y, N> = 0 extends 1 & T ? Y : N;
 
 /** An inserted document */
-export type InsertDocument<TDocument extends Document> =
-  Extract<TDocument["_id"], ObjectId> extends ObjectId
-    ? Omit<TDocument, "_id"> & { _id?: TDocument["_id"] }
-    // deno-lint-ignore ban-types
-    : TDocument["_id"] extends {} ? TDocument
-    : TDocument & { _id?: ObjectId };
+export type InsertDocument<TDocument extends Document> = Extract<
+  TDocument["_id"],
+  ObjectId
+> extends ObjectId
+  ? Omit<TDocument, "_id"> & { _id?: TDocument["_id"] }
+  : // deno-lint-ignore ban-types
+  TDocument["_id"] extends {}
+  ? TDocument
+  : TDocument & { _id?: ObjectId };
 
 type KeysOfType<T, Type> = {
   [Key in keyof T]: NonNullable<T[Key]> extends Type ? Key : never;
 }[keyof T];
 
 type ArrayKeys<T> = {
-  [K in keyof T]: T[K] extends Array<unknown> ? K
+  [K in keyof T]: T[K] extends Array<unknown>
+    ? K
     : T[K] extends Record<string, unknown>
-      ? K extends string ? `${K}.${ArrayKeys<T[K]>}`
+    ? K extends string
+      ? `${K}.${ArrayKeys<T[K]>}`
       : never
     : never;
-}[keyof T] extends infer Keys ? Keys extends string ? Keys : never : never;
-
-type AllKeys<T> = T extends Document ? {
-    [K in keyof T]: T[K] extends Record<string, unknown>
-      ? `${string & K}.${AllKeys<T[K]>}` | `${string & K}`
-      : `${string & K}`;
-  }[keyof T]
+}[keyof T] extends infer Keys
+  ? Keys extends string
+    ? Keys
+    : never
   : never;
 
-type KeyWithSubKeys<T, K extends string> = K extends
-  `${infer Key}.${infer Rest}` ? KeyWithSubKeys<T[Extract<Key, keyof T>], Rest>
-  : K extends keyof T ? T[K]
+type AllKeys<T> = T extends Document
+  ? {
+      [K in keyof T]: T[K] extends Record<string, unknown>
+        ? `${string & K}.${AllKeys<T[K]>}` | `${string & K}`
+        : `${string & K}`;
+    }[keyof T]
+  : never;
+
+type KeyWithSubKeys<
+  T,
+  K extends string
+> = K extends `${infer Key}.${infer Rest}`
+  ? KeyWithSubKeys<T[Extract<Key, keyof T>], Rest>
+  : K extends keyof T
+  ? T[K]
   : never;
 
 /** The document returned by the buildInfo command. */

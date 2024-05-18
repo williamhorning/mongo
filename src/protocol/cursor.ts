@@ -1,4 +1,3 @@
-import { Long } from "../../deps.ts";
 import type { Document } from "../types.ts";
 import { parseNamespace } from "../utils/ns.ts";
 import type { WireProtocol } from "./protocol.ts";
@@ -54,7 +53,7 @@ export class CommandCursor<T> {
     }
 
     const { cursor } = await this.#protocol.commandSingle(this.#db!, {
-      getMore: Long.fromBigInt(this.#id!),
+      getMore: this.#id!,
       collection: this.#collection,
     });
     this.#batches = cursor.nextBatch || [];

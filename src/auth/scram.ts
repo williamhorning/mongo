@@ -1,5 +1,4 @@
 import {
-  Binary,
   decodeBase64,
   encodeBase64,
   encodeHex,
@@ -10,7 +9,7 @@ import type { HandshakeDocument } from "../protocol/handshake.ts";
 import { driverMetadata } from "../protocol/mod.ts";
 import type { Credential, Document } from "../types.ts";
 import { saslprep } from "../utils/saslprep/mod.ts";
-import { type AuthContext, AuthPlugin } from "./base.ts";
+import { AuthPlugin, type AuthContext } from "./base.ts";
 import { pbkdf2 } from "./pbkdf2.ts";
 
 type CryptoMethod = "sha1" | "sha256";
@@ -26,7 +25,7 @@ export class ScramAuthPlugin extends AuthPlugin {
   }
 
   prepare(authContext: AuthContext): Document {
-    const handshakeDoc = <HandshakeDocument> {
+    const handshakeDoc = <HandshakeDocument>{
       ismaster: true,
       client: driverMetadata,
       compression: authContext.options.compression,
@@ -38,7 +37,7 @@ export class ScramAuthPlugin extends AuthPlugin {
           ...makeFirstMessage(
             this.cryptoMethod,
             authContext.options.credential!,
-            authContext.nonce!,
+            authContext.nonce!
           ),
           ...{ db: authContext.options.credential!.db },
         },
@@ -53,7 +52,7 @@ export class ScramAuthPlugin extends AuthPlugin {
       return continueScramConversation(
         this.cryptoMethod,
         response.speculativeAuthenticate,
-        authContext,
+        authContext
       );
     }
     return executeScram(this.cryptoMethod, authContext);
@@ -66,20 +65,18 @@ export function cleanUsername(username: string) {
 export function clientFirstMessageBare(username: string, nonce: Uint8Array) {
   // NOTE: This is done b/c Javascript uses UTF-16, but the server is hashing in UTF-8.
   // Since the username is not sasl-prep-d, we need to do this here.
-  return Uint8Array.from(
-    [
-      ...enc.encode("n="),
-      ...enc.encode(username),
-      ...enc.encode(",r="),
-      ...enc.encode(encodeBase64(nonce)),
-    ],
-  );
+  return Uint8Array.from([
+    ...enc.encode("n="),
+    ...enc.encode(username),
+    ...enc.encode(",r="),
+    ...enc.encode(encodeBase64(nonce)),
+  ]);
 }
 
 export function makeFirstMessage(
   cryptoMethod: CryptoMethod,
   credentials: Credential,
-  nonce: Uint8Array,
+  nonce: Uint8Array
 ) {
   const username = cleanUsername(credentials.username!);
   const mechanism = cryptoMethod === "sha1" ? "SCRAM-SHA-1" : "SCRAM-SHA-256";
@@ -89,11 +86,10 @@ export function makeFirstMessage(
   return {
     saslStart: 1,
     mechanism,
-    payload: new Binary(
-      Uint8Array.from(
-        [...enc.encode("n,,"), ...clientFirstMessageBare(username, nonce)],
-      ),
-    ),
+    payload: Uint8Array.from([
+      ...enc.encode("n,,"),
+      ...clientFirstMessageBare(username, nonce),
+    ]),
     autoAuthorize: 1,
     options: { skipEmptyExchange: true },
   };
@@ -101,7 +97,7 @@ export function makeFirstMessage(
 
 export async function executeScram(
   cryptoMethod: CryptoMethod,
-  authContext: AuthContext,
+  authContext: AuthContext
 ) {
   const { protocol, credentials } = authContext;
   if (!credentials) {
@@ -109,7 +105,7 @@ export async function executeScram(
   }
   if (!authContext.nonce) {
     throw new MongoDriverError(
-      "AuthContext must contain a valid nonce property",
+      "AuthContext must contain a valid nonce property"
     );
   }
   const nonce = authContext.nonce;
@@ -123,7 +119,7 @@ export async function executeScram(
 export async function continueScramConversation(
   cryptoMethod: CryptoMethod,
   response: Document,
-  authContext: AuthContext,
+  authContext: AuthContext
 ) {
   const protocol = authContext.protocol;
   const credentials = authContext.credentials;
@@ -146,13 +142,14 @@ export async function continueScramConversation(
     processedPassword = await passwordDigest(username, password);
   }
 
-  const payload = fixPayload(dec.decode(response.payload.buffer));
+  const payload = fixPayload(dec.decode(response.payload.$data));
+
   const dict = parsePayload(payload);
 
   const iterations = parseInt(dict.i, 10);
   if (iterations && iterations < 4096) {
     throw new MongoDriverError(
-      `Server returned an invalid iteration count ${iterations}`,
+      `Server returned an invalid iteration count ${iterations}`
     );
   }
 
@@ -164,11 +161,12 @@ export async function continueScramConversation(
 
   // Set up start of proof
   const withoutProof = `c=biws,r=${rnonce}`;
+
   const saltedPassword = await HI(
     processedPassword,
     decodeBase64(salt),
     iterations,
-    cryptoMethod,
+    cryptoMethod
   );
 
   const clientKey = await HMAC(cryptoMethod, saltedPassword, "Client Key");
@@ -189,18 +187,18 @@ export async function continueScramConversation(
   const saslContinueCmd = {
     saslContinue: 1,
     conversationId: response.conversationId,
-    payload: new Binary(enc.encode(clientFinal)),
+    payload: enc.encode(clientFinal),
   };
 
   const result = await protocol.commandSingle(db, saslContinueCmd);
 
   const parsedResponse = parsePayload(
-    fixPayload2(dec.decode(result.payload.buffer)),
+    fixPayload2(dec.decode(result.payload.buffer))
   );
   if (
     !compareDigest(
       decodeBase64(parsedResponse.v),
-      new Uint8Array(serverSignature),
+      new Uint8Array(serverSignature)
     )
   ) {
     // throw new MongoDriverError("Server returned an invalid signature");
@@ -248,7 +246,7 @@ export function parsePayload(payload: string) {
 
 export async function passwordDigest(
   username: string,
-  password: string,
+  password: string
 ): Promise<string> {
   if (typeof username !== "string") {
     throw new MongoDriverError("username must be a string");
@@ -264,7 +262,7 @@ export async function passwordDigest(
 
   const result = await stdCrypto.subtle.digest(
     "MD5",
-    enc.encode(`${username}:mongo:${password}`),
+    enc.encode(`${username}:mongo:${password}`)
   );
   return encodeHex(new Uint8Array(result));
 }
@@ -285,16 +283,13 @@ export function xor(_a: ArrayBuffer, _b: ArrayBuffer) {
 }
 
 export function H(method: CryptoMethod, text: BufferSource) {
-  return crypto.subtle.digest(
-    method === "sha256" ? "SHA-256" : "SHA-1",
-    text,
-  );
+  return crypto.subtle.digest(method === "sha256" ? "SHA-256" : "SHA-1", text);
 }
 
 export async function HMAC(
   method: CryptoMethod,
   secret: ArrayBuffer,
-  text: string,
+  text: string
 ) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -304,14 +299,10 @@ export async function HMAC(
       hash: method === "sha256" ? "SHA-256" : "SHA-1",
     },
     false,
-    ["sign", "verify"],
+    ["sign", "verify"]
   );
 
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    enc.encode(text),
-  );
+  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(text));
 
   return signature;
 }
@@ -336,12 +327,10 @@ export async function HI(
   data: string,
   salt: Uint8Array,
   iterations: number,
-  cryptoMethod: CryptoMethod,
+  cryptoMethod: CryptoMethod
 ): Promise<ArrayBuffer> {
   // omit the work if already generated
-  const key = [data, encodeBase64(salt), iterations].join(
-    "_",
-  );
+  const key = [data, encodeBase64(salt), iterations].join("_");
   if (_hiCache[key] !== undefined) {
     return _hiCache[key];
   }
@@ -352,7 +341,7 @@ export async function HI(
     salt,
     iterations,
     hiLengthMap[cryptoMethod],
-    cryptoMethod,
+    cryptoMethod
   );
 
   // cache a copy to speed up the next lookup, but prevent unbounded cache growth

@@ -1,4 +1,4 @@
-import type { Binary, ObjectId } from "../../deps.ts";
+import type { ObjectId } from "../../deps.ts";
 import type { Document, ReadPreference } from "../types.ts";
 import type { ReadConcern, WriteConcern } from "../types/read_write_concern.ts";
 
@@ -9,7 +9,7 @@ export interface Chunk {
   // deno-lint-ignore camelcase
   files_id: ObjectId;
   n: number;
-  data: Binary;
+  data: Uint8Array;
 }
 
 export interface File {

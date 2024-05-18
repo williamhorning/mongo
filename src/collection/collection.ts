@@ -1,4 +1,4 @@
-import { ObjectId } from "../../deps.ts";
+import { ObjectId, realObjectId } from "../../deps.ts";
 import {
   MongoDriverError,
   MongoInvalidArgumentError,
@@ -187,7 +187,8 @@ export class Collection<T extends Document> {
   > {
     const insertedIds = docs.map((doc) => {
       if (!doc._id) {
-        doc._id = new ObjectId();
+        // TODO: make this a real ObjectId
+        doc._id = new realObjectId();
       }
 
       return doc._id;

@@ -1,4 +1,4 @@
-import { ObjectId } from "../../deps.ts";
+import { ObjectId, realObjectId } from "../../deps.ts";
 import type { Collection } from "../collection/collection.ts";
 import type { FindCursor } from "../collection/commands/find.ts";
 import type { Database } from "../database.ts";
@@ -58,7 +58,8 @@ export class GridFSBucket {
     options?: GridFSUploadOptions,
   ): Promise<WritableStream<Uint8Array>> {
     return this.openUploadStreamWithId(
-      new ObjectId(),
+      // TODO: replace with actual objectid
+      new realObjectId() as any,
       filename,
       options,
     );
@@ -97,7 +98,8 @@ export class GridFSBucket {
     source: ReadableStream,
     options?: GridFSUploadOptions,
   ): Promise<ObjectId> {
-    const objectid = new ObjectId();
+    // TODO: replace with actual objectid
+    const objectid = new realObjectId() as any;
     await source.pipeTo(
       await this.openUploadStreamWithId(objectid, filename, options),
     );
@@ -137,7 +139,7 @@ export class GridFSBucket {
       start: async (controller) => {
         const collection = this.#chunksCollection.find({ files_id: id });
         await collection.forEach((value) =>
-          controller.enqueue(value?.data.buffer)
+          controller.enqueue(new Uint8Array(value?.data.buffer))
         );
         controller.close();
       },
